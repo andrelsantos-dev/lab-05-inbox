@@ -1,5 +1,6 @@
 package com.alssant.asclepio;
 
+import com.alssant.asclepio.config.TestcontainersConfiguration;
 import org.springframework.boot.SpringApplication;
 
 public class TestLab05InboxApplication {

@@ -1,0 +1,50 @@
+package com.alssant.asclepio.integration;
+
+import com.alssant.asclepio.config.TestcontainersConfiguration;
+import com.alssant.asclepio.config.rabbit.RabbitProperties;
+import com.alssant.asclepio.inbox.consumer.PatientCreatedConsumer;
+import com.alssant.asclepio.patient.messaging.EventEnvelope;
+import com.alssant.asclepio.support.EventFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.awaitility.Durations;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.mockito.Mockito.verify;
+
+@Import(TestcontainersConfiguration.class)
+@SpringBootTest
+public class RabbitConsumerIntegrationTest {
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+
+    @Autowired
+    private RabbitProperties properties;
+
+    @MockitoSpyBean
+    private PatientCreatedConsumer consumer;
+
+    @Test
+    void shouldReceivePatientCreatedEvent() {
+        EventEnvelope envelope = EventFactory.patientCreated(objectMapper);
+
+        rabbitTemplate.convertAndSend(properties.exchange(), properties.routingKey(), envelope);
+
+        await().atMost(Durations.FIVE_SECONDS).untilAsserted(() -> {
+            ArgumentCaptor<EventEnvelope> payloadCaptor = ArgumentCaptor.forClass(EventEnvelope.class);
+            verify(consumer).onReceive(payloadCaptor.capture());
+            EventEnvelope consumed = payloadCaptor.getValue();
+            assertThat(consumed).usingRecursiveComparison().isEqualTo(envelope);
+        });
+    }
+}
