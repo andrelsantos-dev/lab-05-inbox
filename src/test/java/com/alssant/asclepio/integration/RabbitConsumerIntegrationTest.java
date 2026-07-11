@@ -3,6 +3,9 @@ package com.alssant.asclepio.integration;
 import com.alssant.asclepio.config.TestcontainersConfiguration;
 import com.alssant.asclepio.config.rabbit.RabbitProperties;
 import com.alssant.asclepio.inbox.consumer.PatientCreatedConsumer;
+import com.alssant.asclepio.inbox.domain.InboxEvent;
+import com.alssant.asclepio.inbox.mapper.InboxEventMapper;
+import com.alssant.asclepio.inbox.repository.InboxEventRepository;
 import com.alssant.asclepio.patient.messaging.EventEnvelope;
 import com.alssant.asclepio.support.EventFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,6 +37,12 @@ public class RabbitConsumerIntegrationTest {
     @MockitoSpyBean
     private PatientCreatedConsumer consumer;
 
+    @Autowired
+    private InboxEventRepository inboxEventRepository;
+
+    @Autowired
+    private InboxEventMapper mapper;
+
     @Test
     void shouldReceivePatientCreatedEvent() {
         EventEnvelope envelope = EventFactory.patientCreated(objectMapper);
@@ -46,5 +55,25 @@ public class RabbitConsumerIntegrationTest {
             EventEnvelope consumed = payloadCaptor.getValue();
             assertThat(consumed).usingRecursiveComparison().isEqualTo(envelope);
         });
+    }
+
+    @Test
+    void shouldRegisterReceivedEvent() {
+        EventEnvelope envelope = EventFactory.patientCreated(objectMapper);
+
+        rabbitTemplate.convertAndSend(properties.exchange(), properties.routingKey(), envelope);
+
+        await().atMost(Durations.FIVE_SECONDS).untilAsserted(() -> {
+
+            InboxEvent event = inboxEventRepository
+                    .findById(envelope.metadata().eventId())
+                    .orElseThrow();
+
+            assertThat(event)
+                    .usingRecursiveComparison()
+                    .ignoringFields("receivedAt")
+                    .isEqualTo(mapper.toEntity(envelope));
+        });
+
     }
 }

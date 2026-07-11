@@ -1,5 +1,6 @@
 package com.alssant.asclepio.inbox.consumer;
 
+import com.alssant.asclepio.inbox.service.InboxService;
 import com.alssant.asclepio.patient.messaging.EventEnvelope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,8 +11,15 @@ import org.springframework.stereotype.Component;
 public class PatientCreatedConsumer {
     private static final Logger logger = LoggerFactory.getLogger(PatientCreatedConsumer.class);
 
+    private final InboxService inboxService;
+
+    public PatientCreatedConsumer(InboxService inboxService) {
+        this.inboxService = inboxService;
+    }
+
     @RabbitListener(queues = "${app.rabbitmq.queue}")
     public void onReceive(EventEnvelope envelope) {
         logger.info("Received event: [{}]", envelope.metadata().aggregateId());
+        this.inboxService.register(envelope);
     }
 }
