@@ -5,10 +5,15 @@ import com.alssant.asclepio.inbox.mapper.InboxEventMapper;
 import com.alssant.asclepio.inbox.repository.InboxEventRepository;
 import com.alssant.asclepio.patient.messaging.EventEnvelope;
 import com.alssant.asclepio.shared.exception.InvalidEventException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class InboxService {
+    private static final Logger logger = LoggerFactory.getLogger(InboxService.class);
+
     private final InboxEventRepository repository;
     private final InboxEventMapper mapper;
 
@@ -17,16 +22,29 @@ public class InboxService {
         this.mapper = mapper;
     }
 
+    @Transactional
     public void register(EventEnvelope envelope) {
-        validate(envelope);
+        validateStructure(envelope);
+        if(isAlreadyRegistered(envelope)) {
+            logger.debug(
+                    "Ignoring duplicated event {}",
+                    envelope.metadata().eventId());
+            return;
+        }
+
         InboxEvent inboxEvent = mapper.toEntity(envelope);
+        logger.info("Registering event [{}]", envelope.metadata().eventId());
 
-        repository.save(inboxEvent);
+        try {
+            repository.save(inboxEvent);
+        }catch (Throwable e) {
+            logger.error("Failed to register event [{}]", envelope.metadata().eventId(), e);
+        }
+
+
+        logger.info("Event persisted");
     }
 
-    private void validate(EventEnvelope envelope) {
-        this.validateStructure(envelope);
-    }
 
     private void validateStructure(EventEnvelope envelope) {
         if (envelope == null) {
@@ -44,5 +62,9 @@ public class InboxService {
         if (envelope.payload() == null) {
             throw new InvalidEventException("Event payload must not be null");
         }
+    }
+
+    private boolean isAlreadyRegistered(EventEnvelope envelope) {
+        return repository.existsById(envelope.metadata().eventId());
     }
 }

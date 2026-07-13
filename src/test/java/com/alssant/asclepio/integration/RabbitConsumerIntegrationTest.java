@@ -18,8 +18,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
+import java.util.List;
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 @Import(TestcontainersConfiguration.class)
@@ -64,12 +69,38 @@ public class RabbitConsumerIntegrationTest {
         rabbitTemplate.convertAndSend(properties.exchange(), properties.routingKey(), envelope);
 
         await().atMost(Durations.FIVE_SECONDS).untilAsserted(() -> {
+            Optional<InboxEvent> optEvent =
+                    inboxEventRepository.findById(envelope.metadata().eventId());
 
-            InboxEvent event = inboxEventRepository
-                    .findById(envelope.metadata().eventId())
-                    .orElseThrow();
+            assertThat(optEvent).isPresent();
+
+            InboxEvent event = optEvent.orElseThrow();
 
             assertThat(event)
+                    .usingRecursiveComparison()
+                    .ignoringFields("receivedAt")
+                    .isEqualTo(mapper.toEntity(envelope));
+        });
+
+    }
+
+    @Test
+    void shouldIgnoreDuplicatedEvent() {
+        EventEnvelope envelope = EventFactory.patientCreated(objectMapper);
+
+        rabbitTemplate.convertAndSend(properties.exchange(), properties.routingKey(), envelope);
+        rabbitTemplate.convertAndSend(properties.exchange(), properties.routingKey(), envelope);
+
+        await().atMost(Durations.FIVE_SECONDS).untilAsserted(() -> {
+            verify(consumer, times(2)).onReceive(any());
+
+            List<InboxEvent> events = inboxEventRepository
+                    .findByAggregateId(envelope.metadata().aggregateId());
+            ;
+
+            assertThat(events).hasSize(1);
+
+            assertThat(events.getFirst())
                     .usingRecursiveComparison()
                     .ignoringFields("receivedAt")
                     .isEqualTo(mapper.toEntity(envelope));
