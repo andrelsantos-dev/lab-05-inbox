@@ -8,7 +8,6 @@ import com.alssant.asclepio.shared.exception.InvalidEventException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class InboxService {
@@ -22,27 +21,21 @@ public class InboxService {
         this.mapper = mapper;
     }
 
-    @Transactional
-    public void register(EventEnvelope envelope) {
+    public boolean register(EventEnvelope envelope) {
         validateStructure(envelope);
-        if(isAlreadyRegistered(envelope)) {
+        if (isAlreadyRegistered(envelope)) {
             logger.debug(
                     "Ignoring duplicated event {}",
                     envelope.metadata().eventId());
-            return;
+            return false;
         }
 
         InboxEvent inboxEvent = mapper.toEntity(envelope);
         logger.info("Registering event [{}]", envelope.metadata().eventId());
-
-        try {
-            repository.save(inboxEvent);
-        }catch (Throwable e) {
-            logger.error("Failed to register event [{}]", envelope.metadata().eventId(), e);
-        }
-
+        repository.save(inboxEvent);
 
         logger.info("Event persisted");
+        return true;
     }
 
 
