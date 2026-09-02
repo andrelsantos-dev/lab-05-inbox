@@ -1,4 +1,4 @@
-package com.alssant.asclepio.notification;
+package com.alssant.asclepio.notification.service;
 
 import com.alssant.asclepio.patient.messaging.PatientCreatedEvent;
 

@@ -6,6 +6,8 @@ import com.alssant.asclepio.inbox.consumer.PatientCreatedConsumer;
 import com.alssant.asclepio.inbox.domain.InboxEvent;
 import com.alssant.asclepio.inbox.mapper.InboxEventMapper;
 import com.alssant.asclepio.inbox.repository.InboxEventRepository;
+import com.alssant.asclepio.notification.repository.NotificationRepository;
+import com.alssant.asclepio.notification.service.NotificationService;
 import com.alssant.asclepio.patient.messaging.EventEnvelope;
 import com.alssant.asclepio.support.EventFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,6 +46,12 @@ public class RabbitConsumerIntegrationTest {
 
     @Autowired
     private InboxEventRepository inboxEventRepository;
+
+    @Autowired
+    private NotificationRepository notificationRepository;
+
+    @MockitoSpyBean
+    private NotificationService notificationService;
 
     @Autowired
     private InboxEventMapper mapper;
@@ -107,4 +115,21 @@ public class RabbitConsumerIntegrationTest {
         });
 
     }
+
+    @Test
+    void shouldCreateNotificationForNewPatient() {
+        EventEnvelope envelope = EventFactory.patientCreated(objectMapper);
+
+        rabbitTemplate.convertAndSend(properties.exchange(), properties.routingKey(), envelope);
+
+        await().atMost(Durations.FIVE_SECONDS).untilAsserted(() -> {
+            assertThat(inboxEventRepository.findById(envelope.metadata().eventId()))
+                    .isPresent();
+
+            assertThat(notificationRepository.findByPatientId(envelope.metadata().aggregateId()))
+                    .isPresent();
+        });
+
+    }
+
 }
